@@ -7,6 +7,8 @@ from datetime import datetime
 from logger.meta import get_model_dir, write_temp, get_key, GET_METADATA
 from multiprocessing import Process, Lock
 
+from subpolicy_loader import load_subpolicies
+
 import copy
 
 LoggerLock = Lock()
@@ -24,6 +26,7 @@ def logValue(RL_type, model_path, score, env_kwargs):
     ret[col[8]] = env_kwargs["latency_accuracy"]
     ret[col[9]] = env_kwargs["initial_speed"]
     ret[col[10]] = env_kwargs["num_obstacle"] + env_kwargs["num_disturb"]
+    ret[col[11]] = env_kwargs["max_delay"]
     return ret
 
 
@@ -78,6 +81,18 @@ def epoch(env_kwargs, suffix=".zip", sample_number=None, log_tensorboard=True):
     Template(NavigationEnvPlanning, RL_type="planning")
 
 
+def eval_global(env_kwargs, suffix=".zip", sample_number=None, log_tensorboard=True):
+        def template(n_envs=8, steps=10000000):
+            return lambda env_type, RL_type: RUN(env_type=env_type, RL_type=RL_type, env_kwargs=env_kwargs,
+                                                 suffix=suffix, sample_number=sample_number,
+                                                 log_tensorboard=log_tensorboard, n_envs=n_envs, steps=steps)
+
+        master_template = template(n_envs=4, steps=1000000)
+        subpolicies = load_subpolicies(env_kwargs)
+        NavigationEnvMaster.set_subpolicies(subpolicies)
+        master_template(NavigationEnvMaster, RL_type="master")
+        Template = template()
+        Template(NavigationEnvPlanning, RL_type="planning")
 
 
 default_env_kwargs = {
@@ -86,7 +101,8 @@ default_env_kwargs = {
         "num_disturb":4,
         "num_obstacle":4,
         "initial_speed":2,
-        "latency_accuracy":0.95
+        "latency_accuracy":0.95,
+        "max_delay":2
     }
 
 
@@ -104,7 +120,17 @@ def eval_num_obstacles():
         kwargs = copy.copy(default_env_kwargs)
         kwargs["num_disturb"] = n
         kwargs["num_obstacle"] = n
+        eval_global(kwargs)
+
+
+def eval_num_disturbs():
+    num_disturb = [0, 2]
+    for n in num_disturb:
+        kwargs = copy.copy(default_env_kwargs)
+        kwargs["num_disturb"] = n
         epoch(env_kwargs=kwargs)
+
+
 
 if __name__ == "__main__":
     eval_num_obstacles()

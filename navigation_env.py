@@ -8,6 +8,7 @@ from Box2D.b2 import (edgeShape, circleShape, fixtureDef, polygonShape, revolute
 import gym
 from gym import spaces
 from gym.utils import seeding, EzPickle
+from collections import deque
 
 # Routing Optimization Avoiding Obstacle.
 
@@ -90,7 +91,7 @@ class NavigationEnvDefault(gym.Env):
     continuous = True
 
     def __init__(self, max_obs_range=3, num_disturb=4, num_obstacle=4, initial_speed=2, tail_latency=5,
-                 latency_accuracy = 0.95,
+                 latency_accuracy = 0.95, obs_delay=3,
                  *args, **kwargs):
         self.seed()
         self.viewer = None
@@ -116,6 +117,7 @@ class NavigationEnvDefault(gym.Env):
         self.dynamics = initial_speed
         self.energy = 1
         self.latency_error = (1 - latency_accuracy)
+        self.max_delay = obs_delay
         self.reset()
 
     @property
@@ -530,16 +532,30 @@ class NavigationEnvMaster(NavigationEnvDefault):
         return self.get_global_obs(obs)
 
     def step(self, action):
+        """
+        compute disconnected time steps, delay
+        must return observation, which contains k-step before data where k is delay
+
+        """
         time_step = self.time_schedule(self.network_state)
         subpolicy = self.subpolicies[action]
         local_obs = self.cur_local_obs
         reward = 0
         done = False
         info = {}
+        obs_state = deque(maxlen=self.max_delay)
+        if time_step >= self.max_delay:
+            # when do you want collect global observation??
+            obs_state_step = time_step - self.max_delay
+        else:
+            obs_state_step = 0
         for i in range(time_step):
             subpolicy_action, _ = subpolicy.predict(local_obs)
             local_obs, reward, done, info = super().step(subpolicy_action)
+            obs_state.append(local_obs)
             reward = 0
+            if i == obs_state_step:
+                obs = self.get_global_obs(local_obs)
             if done:
                 if self.achieve_goal:
                     reward = 10
@@ -553,7 +569,7 @@ class NavigationEnvMaster(NavigationEnvDefault):
 
         self.cur_local_obs = local_obs
         self.network_state = self.get_network_state()
-        obs = self.get_global_obs(local_obs)
+
         return obs, reward, done, info
 
 

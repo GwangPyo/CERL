@@ -1,4 +1,8 @@
-from run_model import temp_eval_model
+from logger.meta import GET_METADATA, SET_METADATA
+
+
 
 if __name__ == "__main__":
-    temp_eval_model()
+    meta = GET_METADATA()
+    meta += ["max_delay"]
+    SET_METADATA(meta)

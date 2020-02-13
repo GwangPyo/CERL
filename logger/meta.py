@@ -128,5 +128,3 @@ def INIT():
     MACHINE_KEY()
     return
 
-if __name__=="__main__":
-    print(MACHINE_KEY.set_key())
